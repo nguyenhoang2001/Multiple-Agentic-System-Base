@@ -24,24 +24,33 @@ from typing import Optional
 import httpx
 from smolagents import Tool
 
+from app.agent_system.tools.device_resolver import resolve_device
+from app.agent_system.tools.device_registry import lookup
+
 
 class SensorLogsTool(Tool):
     name = "sensor_logs_reader"
-    description = (
-        "Fetches live sensor readings from the smart home hub API. "
-        "Use this to get the CURRENT state or reading of any device, including: "
-        "temperature, humidity, CO2 (ppm), motion detection, power consumption (W/kWh), "
-        "lock state (locked/unlocked), light state (on/off), brightness (%), "
-        "color temperature (K), blind position (%), speaker volume (%), and more. "
-        "Always use this tool when asked about CURRENT values — do not rely on the knowledge base for live readings. "
-        "Provide the device_id when known (e.g. 'light_living_01', 'thermostat_01'); "
-        "leave it empty to query all devices."
-    )
+    description = """
+            Retrieves and queries sensor logs from smart home devices.
+            Use this tool when you need to:
+            - Check the current state of a sensor (temperature, humidity, light brightness)
+            - Detect anomalies or unusual patterns in sensor data
+            - Verify if a device action was successfully executed by checking state changes
+            - Answer user questions about their home environment
+
+            You can pass an exact device_id (e.g. 'thermostat_01') OR a natural-language
+            description (e.g. 'bedroom thermostat', 'living room light').
+            The tool will resolve it automatically.
+
+            Returns structured sensor data including device_id, timestamp, reading_type, and value.
+        """
     inputs = {
         "device_id": {
             "type": "string",
             "description": (
-                "The device ID to query (e.g. 'temp_bedroom_01', 'motion_living_01'). "
+                "The device to query. Can be an exact device ID like 'thermostat_01' "
+                "OR a natural-language reference like 'bedroom thermostat', "
+                "'living room light', 'bedroom light'. "
                 "Leave empty to retrieve readings for all devices."
             ),
             "nullable": True,
@@ -49,8 +58,8 @@ class SensorLogsTool(Tool):
         "sensor_type": {
             "type": "string",
             "description": (
-                "Filter readings by sensor type (e.g. 'temperature', 'humidity', 'co2', "
-                "'motion', 'power', 'lock_state'). Leave empty for all sensor types."
+                "Filter readings by sensor type (e.g. 'temperature', 'humidity', "
+                "'brightness', 'temperature_setpoint'). Leave empty for all sensor types."
             ),
             "nullable": True,
         },
@@ -63,6 +72,20 @@ class SensorLogsTool(Tool):
         sensor_type: Optional[str] = None,
     ) -> str:
         base_url = os.getenv("SMART_HOME_API_BASE", "http://localhost:8123").rstrip("/")
+
+        # Resolve natural-language device references
+        if device_id and not lookup(device_id):
+            result = resolve_device(device_id)
+            if not result.found:
+                return f"Error: could not find a device matching '{device_id}'."
+            if result.ambiguous:
+                options = ", ".join(f"{m.name} ({m.device_id})" for m in result.matches)
+                return (
+                    f"Ambiguous device reference '{device_id}'. "
+                    f"Multiple devices match: {options}. "
+                    f"Please specify which one."
+                )
+            device_id = result.device_id
 
         try:
             if device_id:
@@ -82,6 +105,10 @@ class SensorLogsTool(Tool):
             data = response.json()
             if not data:
                 return "No sensor readings found for the given filters."
+
+            # If the response has task_outcome_short, return it directly
+            if isinstance(data, dict) and "task_outcome_short" in data:
+                return data["task_outcome_short"]
 
             # Format the response as readable text
             lines = []

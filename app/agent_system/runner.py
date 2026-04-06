@@ -80,7 +80,6 @@ def _make_agent() -> CodeAgent:
         max_steps=manager_agent.max_steps,
         additional_authorized_imports=manager_agent.authorized_imports,
         verbosity_level=manager_agent.logger.level,
-        # instructions=_INSTRUCTIONS,
         stream_outputs=True,  # stream code-execution print outputs
         code_block_tags="markdown",  # qwen3 outputs ```python blocks; align parser + system prompt
         instructions=_INSTRUCTIONS,

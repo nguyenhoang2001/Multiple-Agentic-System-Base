@@ -15,10 +15,10 @@ Typical usage
     logs = read_sensor_logs()
 
     # Filter by device
-    logs = read_sensor_logs(device_id="temp_bedroom_01")
+    logs = read_sensor_logs(device_id="thermostat_01")
 
     # Filter by device and sensor type
-    logs = read_sensor_logs(device_id="temp_living_01", sensor_type="co2")
+    logs = read_sensor_logs(device_id="thermostat_01", sensor_type="temperature")
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def read_sensor_logs(
     device_id:
         Filter by device ID (case-insensitive). If None, all devices are included.
     sensor_type:
-        Filter by sensor type (e.g. ``'temperature'``, ``'motion'``, ``'co2'``).
+        Filter by sensor type (e.g. ``'temperature'``, ``'humidity'``, ``'brightness'``).
         If None, all sensor types are included.
     last_n:
         Maximum number of most-recent records to return after filtering.

@@ -41,4 +41,5 @@ else:
         model_id=os.environ.get("LLM_MODEL_ID", "qwen3:1.7b"),
         api_base=os.environ.get("LLAMA_SERVER_URL", "http://localhost:11434/v1"),
         api_key="ollama",  # required by client, ignored by Ollama
+        max_tokens=4096,  # smaller context window for local model
     )

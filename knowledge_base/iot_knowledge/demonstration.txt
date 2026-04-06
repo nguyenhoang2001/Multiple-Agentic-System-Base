@@ -1,9 +1,10 @@
 # Smart Home Agent Demonstration Examples
 # These examples show how the agent interprets user requests and maps them to device commands.
+# Available devices: light_living_01 (living room), light_bedroom_01 (bedroom), thermostat_01 (bedroom)
 
 ---
 
-## Example 1: Turn on the lights
+## Example 1: Turn on the living room light
 User: "Turn on the lights in the living room"
 Reasoning: User wants light_living_01 enabled. No specific brightness mentioned — use default 80%.
 Command: POST /api/devices/light_living_01/control {"action": "turn_on", "brightness": 80}
@@ -11,80 +12,51 @@ Response: "Living room light turned on at 80% brightness."
 
 ---
 
-## Example 2: Set a comfortable temperature
+## Example 2: Turn off the bedroom light
+User: "Turn off the bedroom light"
+Reasoning: User wants light_bedroom_01 turned off.
+Command: POST /api/devices/light_bedroom_01/control {"action": "turn_off"}
+Response: "Bedroom light turned off."
+
+---
+
+## Example 3: Set a comfortable temperature
 User: "It's too cold, make it warmer"
-Reasoning: User wants temperature raised. Current thermostat setpoint retrieved from logs. Increase by 2°C or set to comfort default of 22°C.
+Reasoning: User wants temperature raised. Set thermostat to comfort default of 22°C.
 Command: POST /api/devices/thermostat_01/control {"action": "set_temperature", "setpoint": 22, "mode": "heat"}
 Response: "Thermostat set to 22°C in heating mode."
 
 ---
 
-## Example 3: Check sensor readings
+## Example 4: Check the thermostat
 User: "What's the temperature in the bedroom?"
-Reasoning: Retrieve the latest reading from temp_bedroom_01 from sensor logs.
-Action: Read sensor_logs.csv, filter device_id=temp_bedroom_01, sensor_type=temperature, get latest row.
-Response: "The bedroom temperature is currently 21.3°C with 55% humidity."
+Reasoning: Retrieve the current reading from thermostat_01.
+Action: Query thermostat_01 sensor data for current temperature.
+Response: "The bedroom temperature is currently 21.3°C."
 
 ---
 
-## Example 4: Turn off everything before bed
+## Example 5: Turn off everything before bed
 User: "I'm going to bed, goodnight"
-Reasoning: User wants to activate night mode — lights off, temperature lowered, door locked.
+Reasoning: User wants to turn off all lights and lower the temperature.
 Commands:
   POST /api/devices/light_living_01/control {"action": "turn_off"}
-  POST /api/devices/light_kitchen_01/control {"action": "turn_off"}
+  POST /api/devices/light_bedroom_01/control {"action": "turn_off"}
   POST /api/devices/thermostat_01/control {"action": "set_temperature", "setpoint": 19, "mode": "auto"}
-  POST /api/devices/door_front_01/control {"action": "lock"}
-Response: "Goodnight! Lights off, thermostat set to 19°C, and front door locked."
+Response: "Goodnight! Lights off and thermostat set to 19°C."
 
 ---
 
-## Example 5: Energy check
-User: "How much power is the TV using?"
-Reasoning: Retrieve latest energy reading from plug_tv_01 sensor logs.
-Action: Read sensor_logs.csv, filter device_id=plug_tv_01, sensor_type=power, get latest row.
-Response: "The TV smart plug is currently drawing 120W."
-
----
-
-## Example 6: Motion query
-User: "Is anyone in the living room?"
-Reasoning: Check the latest motion sensor reading from motion_living_01.
-Action: Read sensor_logs.csv, filter device_id=motion_living_01, sensor_type=motion, get latest row.
-Response: "Motion was last detected in the living room 4 minutes ago — someone is likely still there."
-
----
-
-## Example 7: Set a scene
+## Example 6: Set a scene
 User: "Movie time"
-Reasoning: Movie scene typically means dimmed warm lights and blinds closed.
-Commands:
-  POST /api/devices/light_living_01/control {"action": "set", "brightness": 20, "color_temperature": 2700}
-  POST /api/devices/blind_living_01/control {"action": "set_position", "position": 0}
-  POST /api/devices/plug_tv_01/control {"action": "turn_on"}
-Response: "Movie mode activated: lights dimmed to 20% warm white, blinds closed, TV powered on."
+Reasoning: Movie scene typically means dimmed warm lights in the living room.
+Command: POST /api/devices/light_living_01/control {"action": "set", "brightness": 20, "color_temperature": 2700}
+Response: "Movie mode activated: living room light dimmed to 20% warm white."
 
 ---
 
-## Example 8: Air quality concern
-User: "The air feels stuffy in here"
-Reasoning: User is concerned about air quality. Retrieve CO2 and AQI readings. If above threshold, recommend ventilation action.
-Action: Read sensor_logs.csv, filter device_id=temp_living_01, check co2 and aqi values.
-Command (if CO2 > 1000 ppm): POST /api/devices/blind_living_01/control {"action": "set_position", "position": 50}
-Response: "CO2 is at 1340 ppm — that's elevated. I've opened the blinds halfway to increase ventilation."
-
----
-
-## Example 9: Lock the door remotely
-User: "Did I lock the door?"
-Reasoning: Check the latest state of door_front_01 from sensor logs.
-Action: Read sensor_logs.csv, filter device_id=door_front_01, sensor_type=lock_state, get latest row.
-Response: "The front door is currently unlocked. Would you like me to lock it?"
-
----
-
-## Example 10: Guest access
-User: "Let my guest in"
-Reasoning: Temporarily unlock the front door.
-Command: POST /api/devices/door_front_01/control {"action": "unlock", "duration_seconds": 300}
-Response: "Front door unlocked for 5 minutes. It will automatically re-lock after that."
+## Example 7: Adjust brightness
+User: "Make the bedroom light brighter"
+Reasoning: User wants to increase brightness on light_bedroom_01.
+Command: POST /api/devices/light_bedroom_01/control {"action": "set", "brightness": 100}
+Response: "Bedroom light set to 100% brightness."

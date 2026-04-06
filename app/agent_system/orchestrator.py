@@ -1,29 +1,17 @@
 """
 Orchestrator – Manager Agent
 
-Implements the top-level CodeAgent that:
-  1. Receives the user query.
-  2. Delegates to one or more managed sub-agents as needed:
-       - web_agent       : live web search & page visit
-       - retriever_agent : FAISS-backed HF docs & PEFT issues retrieval
-       - image_agent     : prompt refinement + image generation
-  3. Has direct access to a Python code interpreter tool.
-  4. Synthesises all results into a final answer via the LLM.
-
-Model: Qwen/Qwen2.5-72B-Instruct via HuggingFace Inference API (no OpenAI).
-
-Note: In smolagents >=1.0, sub-agents are passed directly to managed_agents as
-      MultiStepAgent instances. Each sub-agent must have a name and description
-      set so the manager knows when to delegate to them.
+Routes user requests directly to the appropriate specialist agent:
+  - home_control_agent for device control (turn on/off, set brightness, temperature, etc.)
+  - home_monitor_agent for sensor readings (temperature, humidity, brightness, etc.)
 """
 
 from smolagents import CodeAgent
 
 from app.agent_system.model import model
-from app.agent_system.agents.web_agent import web_agent
-from app.agent_system.agents.retriever_agent import retriever_agent
-from app.agent_system.agents.smart_home_agent import smart_home_agent
-from app.agent_system.agents.clarification_agent import clarification_agent
+from app.agent_system.agents.home_control_agent import home_control_agent
+from app.agent_system.agents.home_monitor_agent import home_monitor_agent
+from app.agent_system.tools import conversation_history_tool
 
 
 # ---------------------------------------------------------------------------
@@ -31,57 +19,79 @@ from app.agent_system.agents.clarification_agent import clarification_agent
 # ---------------------------------------------------------------------------
 
 _INSTRUCTIONS = """
-You are a helpful IoT smart home assistant agent.
+    You are a smart home assistant orchestrator.
 
-=== ROUTING RULES ===
+    ## Output format (STRICT)
+    Every response you produce must contain exactly one code block:
+    Thoughts: <your reasoning>
+    ```python
+    # code here
+    ```
 
-For SENSOR/STATUS QUERIES (current temperature, brightness, lock state, motion, volume, power, CO2, etc.)
-AND for CONTROL COMMANDS (turn on/off, set, lock, unlock, pause, play, open, close, adjust):
-```python
-result = smart_home_agent(task="<user message verbatim>")
-final_answer(result)
-```
+    ## ROUTING — Pick ONE agent, then final_answer()
 
-For GENERAL KNOWLEDGE questions (automation rules, how devices work, device specs, capabilities):
-```python
-result = retriever_agent(task="<user question>")
-final_answer(result)
-```
+    **A) Device control** (turn on/off, set brightness, colour temperature, thermostat temperature/mode):
+    → Pass the user's message to home_control_agent.
+    ```python
+    answer = home_control_agent(task="<user message>")
+    final_answer(answer)
+    ```
 
-For CLARIFICATION (control command with no room named and device is not thermostat or front door lock):
-```python
-question = clarification_agent(task="User wants to [verb] the [device] but gave no location. Ask which room.")
-final_answer(question)
-```
+    **B) Sensor / monitoring** (check temperature, humidity, brightness level, device state):
+    → Pass the user's message to home_monitor_agent.
+    ```python
+    answer = home_monitor_agent(task="<user message>")
+    final_answer(answer)
+    ```
 
-Examples:
-- "how bright is the living room light?" → smart_home_agent
-- "what is the temperature in bedroom?" → smart_home_agent
-- "is the front door locked?" → smart_home_agent
-- "turn on the bedroom light" → smart_home_agent
-- "set thermostat to 22°C" → smart_home_agent
-- "turn off the speaker" (no room) → clarification_agent
-- "what automation rules are there?" → retriever_agent
-- "what did I ask previously?" → retriever_agent
+    **C) Anything else** (unknown, off-topic):
+    ```python
+    final_answer("Sorry, I can only help with controlling or monitoring smart home devices.")
+    ```
 
-=== FORMAT ===
-Always use Python code blocks. End with final_answer(...). Never plain text only.
-Sub-agents return plain text strings — never iterate over them.
+    ## RULES
+    - Call exactly ONE agent, then final_answer(). That's it — one step.
+    - NEVER retry or call the same agent twice.
+    - NEVER call both agents for the same request.
+
+    ## Examples
+
+    User: "turn on the living room light"
+    ```python
+    answer = home_control_agent(task="turn on the living room light")
+    final_answer(answer)
+    ```
+
+    User: "set bedroom thermostat to 24 degrees"
+    ```python
+    answer = home_control_agent(task="set bedroom thermostat to 24 degrees")
+    final_answer(answer)
+    ```
+
+    User: "what is the bedroom temperature?"
+    ```python
+    answer = home_monitor_agent(task="what is the bedroom temperature?")
+    final_answer(answer)
+    ```
+
+    User: "check the living room light brightness"
+    ```python
+    answer = home_monitor_agent(task="check the living room light brightness")
+    final_answer(answer)
+    ```
 """
 
 manager_agent = CodeAgent(
     tools=[],
     model=model,
     managed_agents=[
-        retriever_agent,
-        smart_home_agent,
-        clarification_agent,
-        # web_agent,
+        home_control_agent,
+        home_monitor_agent,
     ],
-    max_steps=5,  # retrieve → control → final_answer, +2 buffer
-    additional_authorized_imports=["time", "datetime", "PIL"],
+    max_steps=2,
+    additional_authorized_imports=["time", "datetime"],
     verbosity_level=1,
-    stream_outputs=True,  # stream code-execution outputs
-    code_block_tags="markdown",  # qwen3 outputs ```python blocks; align parser + system prompt
+    stream_outputs=True,
+    code_block_tags="markdown",
     instructions=_INSTRUCTIONS,
 )
