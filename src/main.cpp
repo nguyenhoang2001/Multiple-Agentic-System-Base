@@ -1,28 +1,30 @@
 #include <Arduino.h>
-
-void TaskLEDControl(void *pvParameters) {
-  pinMode(GPIO_NUM_48, OUTPUT); // Initialize LED pin
-  int ledState = 0;
-  while(1) {
-    
-    if (ledState == 0) {
-      digitalWrite(GPIO_NUM_48, HIGH); // Turn ON LED
-    } else {
-      digitalWrite(GPIO_NUM_48, LOW); // Turn OFF LED
-    }
-    ledState = 1 - ledState;
-    vTaskDelay(2000);
-  }
-}
-
+#include "config.h"
+#include "connect/WiFiManager.h"
+#include "Device/LEDTask.h"
+#include "connect/TBClient.h"
+#include "connect/RPCHandler.h"
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(115200);
-  xTaskCreate(TaskLEDControl, "LED Control", 2048, NULL, 2, NULL);
+    Serial.begin(SERIAL_BAUD);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    Serial.println("\n[Boot] CoreIoT LED – Server-Side RPC 2-way");
+
+    ledQueue = xQueueCreate(1, sizeof(bool));
+    configASSERT(ledQueue);
+
+    // ledTask on Core 0
+    xTaskCreatePinnedToCore(ledTask, "led_task", 2048, nullptr, 1, nullptr, 0);
+
+    InitWiFi();
+
+    // Kích hoạt cờ gửi trạng thái mặc định (false) lên ThingsBoard
+    pendingAttrUpdate = true;
+
+    // tbTask on Core 1 for MQTT handling
+    xTaskCreatePinnedToCore(tbTask, "tb_task", 4096, nullptr, 1, nullptr, 1);
 }
 
 void loop() {
-  // Serial.println("Hello Custom Board");
-  // delay(1000);
+    vTaskDelete(NULL);
 }
