@@ -1,7 +1,7 @@
 #pragma once
 
-constexpr char     WIFI_SSID[]          = "ACLAB";
-constexpr char     WIFI_PASSWORD[]      = "ACLAB2023";
+constexpr char     WIFI_SSID[]          = "Thang";
+constexpr char     WIFI_PASSWORD[]      = "haicau999";
 constexpr char     TOKEN[]              = "xdF2nW4aR9SAdqqPiym0";
 constexpr char     DEVICE_ID[]          = "fcceeaa0-3111-11f1-9981-cffbb69f5b14";
 constexpr char     THINGSBOARD_SERVER[] = "app.coreiot.io";

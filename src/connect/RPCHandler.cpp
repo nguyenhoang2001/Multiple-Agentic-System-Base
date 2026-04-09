@@ -1,17 +1,34 @@
 #include "RPCHandler.h"
-#include "../Device/LEDTask.h"
+#include "../Device/DeviceManager.h"
 #include <Arduino.h>
-#include <Server_Side_RPC.h>
+#include <string>
 
-void onSetValue(const JsonVariantConst &params, JsonDocument &response) {
-    if (!params.containsKey(LED_KEY)) {
-        Serial.println("[RPC] setValue: missing key 'led'");
-        response["error"] = "missing key 'led'";
+void handleRPCCall(const char* method, const char* params, std::string& response) {
+    JsonDocument reqDoc;
+    JsonDocument respDoc;
+    
+    // Parse incoming parameters
+    DeserializationError error = deserializeJson(reqDoc, params);
+    if (error) {
+        respDoc["error"] = "Invalid JSON";
+        serializeJson(respDoc, response);
         return;
     }
-    bool newState = params[LED_KEY].as<bool>();
-    ledState = newState;
-    xQueueOverwrite(ledQueue, &newState);
-    Serial.printf("[RPC] setValue led = %s\n", newState ? "true" : "false");
-    response[LED_KEY] = newState;
+    
+    // Extract device ID from the method (format: "deviceId_methodName")
+    // Or use a global device ID from config
+    
+    DeviceManager* dm = DeviceManager::getInstance();
+    
+    // Try to find device by name or use default
+    const char* deviceId = DEVICE_ID;  // From config.h
+    
+    Serial.printf("[RPC] Handling method: %s with params: %s\n", method, params);
+    
+    if (dm->handleRPC(deviceId, method, reqDoc.as<JsonVariantConst>(), respDoc)) {
+        serializeJson(respDoc, response);
+    } else {
+        respDoc["error"] = "Method or device not found";
+        serializeJson(respDoc, response);
+    }
 }
