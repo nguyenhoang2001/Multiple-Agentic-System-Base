@@ -1,0 +1,1 @@
+{"device_name": "indoor_temperature_humidity_sensor", "room": "indoor_environment", "token": "xdF2nW4aR9SAdqqPiym0", "action": "read", "type_device": "temperature_humidity", "shared_attributes": {"indoor_humidity": 53.96032333, "indoor_temperature": 22.66712189}, "timestamp": "2026-04-16T20:29:14.974957+00:00"}

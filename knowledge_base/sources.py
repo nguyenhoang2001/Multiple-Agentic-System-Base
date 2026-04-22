@@ -1,21 +1,19 @@
-"""Document sources for the RAG knowledge base.
+"""Document sources for the IoT Smart Home RAG knowledge base.
 
-This is the single place to define what gets indexed into the vector store.
-Add, remove, or replace sources here — the builder will pick them up
-automatically on the next run.
+This is the single place to define what gets indexed into the static FAISS
+vector store. Add, remove, or replace sources here — the builder will pick
+them up automatically on the next run. The vector store auto-rebuilds when
+any .txt file under ``knowledge_base/iot_knowledge/`` changes (mtime check
+in ``app/vectore_store/store.py``).
 
-Current sources
----------------
-- HuggingFace docs dataset (``m-ric/huggingface_doc``)
+Static knowledge (embedded once, auto-rebuilt on change)
+---------------------------------------------------------
+- ``rule/``         — automation rules (triggers, conditions, actions)
+- ``demonstration/``— worked examples: user request → CoreIoT API call
 
-To add your own files later, load them here and extend the returned list::
-
-    from langchain_community.document_loaders import DirectoryLoader, TextLoader
-
-    dir_loader = DirectoryLoader("knowledge_base/files/", glob="**/*.txt",
-                                 loader_cls=TextLoader)
-    local_docs = dir_loader.load()
-    return hf_docs + local_docs
+Note: The device registry is in ``smart_home_configuration.json`` and is
+NEVER embedded into FAISS. Agents query it live via ``iterate_smart_home_yaml_tool``.
+Conversation history is async-embedded separately by ``conversation_memory``.
 
 Typical usage
 -------------
@@ -27,53 +25,58 @@ Typical usage
 from __future__ import annotations
 
 import logging
+import os
 from typing import List
 
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
+IOT_KNOWLEDGE_PATH: str = os.environ.get(
+    "IOT_KNOWLEDGE_PATH", "knowledge_base/iot_knowledge"
+)
 
-def _load_hf_dataset() -> List[Document]:
-    """Download and return documents from the HuggingFace docs dataset."""
-    import datasets
+_SUBDIRS: dict[str, str] = {
+    "rule": "rule",
+    "demonstration": "demonstration",
+}
 
-    logger.info("Loading HuggingFace docs dataset (m-ric/huggingface_doc)...")
-    knowledge_base = datasets.load_dataset("m-ric/huggingface_doc", split="train")
-    docs = [
-        Document(
-            page_content=doc["text"],
-            metadata={"source": doc["source"].split("/")[1]},
-        )
-        for doc in knowledge_base
-    ]
-    logger.info("Loaded %d documents from HuggingFace dataset.", len(docs))
+
+def _load_subdir(subdir_name: str, source_tag: str) -> List[Document]:
+    """Load all .txt files from a subdirectory and tag them with *source_tag*."""
+    path = os.path.join(IOT_KNOWLEDGE_PATH, subdir_name)
+    if not os.path.isdir(path):
+        logger.warning("Knowledge subdir not found, skipping: '%s'", path)
+        return []
+
+    loader = DirectoryLoader(
+        path,
+        glob="**/*.txt",
+        loader_cls=TextLoader,
+        loader_kwargs={"encoding": "utf-8"},
+        show_progress=False,
+        silent_errors=True,
+    )
+    docs = loader.load()
+    for doc in docs:
+        doc.metadata["source"] = source_tag
+    logger.info(
+        "Loaded %d document(s) from '%s/' (tag=%s).", len(docs), subdir_name, source_tag
+    )
     return docs
 
 
 def load_documents() -> List[Document]:
     """
-    Return the full list of LangChain Documents to be indexed.
+    Return all LangChain Documents to be indexed into the static FAISS store.
 
-    This is the entrypoint called by the vector store builder. Extend this
-    function when you want to add new document sources.
+    Called by the vector store builder. Extend ``_SUBDIRS`` to add more
+    static knowledge sources.
     """
     docs: List[Document] = []
+    for subdir_name, source_tag in _SUBDIRS.items():
+        docs.extend(_load_subdir(subdir_name, source_tag))
 
-    # --- Source 1: HuggingFace docs dataset (replace with your own sources) ---
-    docs.extend(_load_hf_dataset())
-
-    # --- Source 2: Local files (uncomment and adjust when ready) -------------
-    # from langchain_community.document_loaders import DirectoryLoader, TextLoader
-    # from langchain_community.document_loaders import PyPDFLoader
-    # from langchain_community.document_loaders import UnstructuredMarkdownLoader
-    # loaders = [
-    #     DirectoryLoader("knowledge_base/files/", glob="**/*.txt",  loader_cls=TextLoader),
-    #     DirectoryLoader("knowledge_base/files/", glob="**/*.pdf",  loader_cls=PyPDFLoader),
-    #     DirectoryLoader("knowledge_base/files/", glob="**/*.md",   loader_cls=UnstructuredMarkdownLoader),
-    # ]
-    # for loader in loaders:
-    #     docs.extend(loader.load())
-
-    logger.info("Total documents collected: %d", len(docs))
+    logger.info("Total static documents collected: %d", len(docs))
     return docs

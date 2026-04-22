@@ -1,0 +1,2 @@
+{"device_name": "bedroom_night_light_controller", "room": "bedroom", "token": "xdF2nW4aR9SAdqqPiym0", "action": "post", "type_device": "smart_night_light", "shared_attributes": {"bedroom_night_light": true, "bedroom_night_light_mode": 1}, "timestamp": "2026-04-17T01:47:41.229242+00:00"}
+{"device_name": "bedroom_night_light_controller", "room": "bedroom", "token": "xdF2nW4aR9SAdqqPiym0", "action": "post", "type_device": "smart_night_light", "shared_attributes": {"bedroom_night_light": false}, "timestamp": "2026-04-17T01:48:42.336341+00:00"}

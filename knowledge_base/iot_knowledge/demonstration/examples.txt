@@ -1,0 +1,88 @@
+# Smart Home Agent — Worked Examples
+# Shows: user request → intent parse → YAML iterate → device selection → API call
+
+---
+
+## Example 1: Turn on the living room ceiling light
+User: "bật đèn trần phòng khách"
+Intent: control | room=living_room | type=smart_light
+Step 4 – iterate_smart_home_yaml(room_name="living_room", type_device="smart_light") returns:
+  rooms:
+    - name: living_room
+      type_device:
+        - name_type: smart_light
+          devices:
+            - name: Đèn trần
+              device_token: xdF2nW4aR9SAdqqPiym0
+              shared_attributess: [{name_key: led, value: boolean}]
+            - name: Đèn ngủ
+              device_token: a1b2c3d4e5f6g7h8i9j0
+              shared_attributess: [{name_key: brightness, value: integer}, {name_key: led, value: boolean}]
+Step 5 – retriever_agent selects "Đèn trần" (ceiling = trần):
+  [{"name_device": "Đèn trần", "token": "xdF2nW4aR9SAdqqPiym0", "room": "living_room", "shared_attributes": {"led": true}}]
+Step 6 – iot_action_agent calls post_shared_attributes:
+  GET current → {"led": false}
+  diff → {"led": true}  (changed)
+  POST /api/v1/xdF2nW4aR9SAdqqPiym0/attributes → {"led": true}
+Response: "Đèn trần (living_room): thành công → {'led': True}"
+
+---
+
+## Example 2: Check if the kitchen light is on
+User: "đèn bếp đang bật hay tắt?"
+Intent: read | room=kitchen | type=smart_light
+Step 4 – iterate_smart_home_yaml(room_name="kitchen", type_device="smart_light"):
+  device: đèn bếp, token k1l2m3n4o5p6q7r8s9t0
+Step 5 – retriever_agent selects đèn bếp:
+  [{"name_device": "đèn bếp", "token": "k1l2m3n4o5p6q7r8s9t0", "room": "kitchen", "shared_attributes": {"led": null}}]
+Step 6 – iot_action_agent calls read_shared_attributes:
+  GET /api/v1/k1l2m3n4o5p6q7r8s9t0/attributes?clientKeys=led&sharedKeys=led → {"led": false}
+Response: "đèn bếp (kitchen): {'led': False}" → "Đèn bếp hiện đang TẮT."
+
+---
+
+## Example 3: Set kitchen fan to speed 2
+User: "tăng quạt bếp lên tốc độ 2"
+Intent: control | room=kitchen | type=smart_fan
+Step 4 – iterate_smart_home_yaml(room_name="kitchen", type_device="smart_fan"):
+  device: quạt trần, token f9g8h7i6j5k4l3m2n1o0
+Step 5 – retriever_agent:
+  [{"name_device": "quạt trần", "token": "f9g8h7i6j5k4l3m2n1o0", "room": "kitchen", "shared_attributes": {"speed": 2, "toogle": true}}]
+Step 6 – iot_action_agent calls post_shared_attributes:
+  GET → {"speed": 1, "toogle": true}
+  diff → {"speed": 2}  (only speed changed)
+  POST → {"speed": 2}
+Response: "quạt trần (kitchen): thành công → {'speed': 2, 'toogle': True}"
+
+---
+
+## Example 4: Ambiguous request — no room specified
+User: "bật đèn"
+Intent: control | room=None | type=smart_light
+Step 2 – check_buffer_window returns [] (first message in session)
+Step 3 – clarification_agent:
+  iterate_smart_home_yaml(type_device="smart_light") → finds living_room + kitchen
+  Returns: "Bạn muốn bật đèn ở phòng nào? Tôi tìm thấy: living_room, kitchen."
+→ User replies: "phòng khách" → next turn has room=living_room → proceed to Step 4.
+
+---
+
+## Example 5: Buffer Window cache hit
+User turn 1: "bật đèn trần phòng khách" → success, BufferWindow stores:
+  {device_name: "Đèn trần", room: "living_room", token: "xdF2nW4aR9SAdqqPiym0", action: "post", shared_attributes: {"led": true}}
+User turn 2: "tắt đèn" (no room)
+Step 2 – check_buffer_window(query="tắt đèn") → hit: room=living_room, token=xdF2nW4aR9SAdqqPiym0
+→ Skip clarification. Use cached room + token directly.
+Step 4 – iterate_smart_home_yaml(room_name="living_room", type_device="smart_light")
+Step 5 – retriever_agent selects Đèn trần
+Step 6 – post_shared_attributes → {"led": false}
+
+---
+
+## Example 6: Set bedside lamp brightness
+User: "đặt độ sáng đèn ngủ phòng khách là 60"
+Intent: control | room=living_room | type=smart_light
+Step 5 – retriever_agent selects "Đèn ngủ" (ngủ = bedside/sleep lamp):
+  [{"name_device": "Đèn ngủ", "token": "a1b2c3d4e5f6g7h8i9j0", "room": "living_room", "shared_attributes": {"brightness": 60}}]
+Step 6 – post_shared_attributes → {"brightness": 60}
+Response: "Đèn ngủ (living_room): thành công → {'brightness': 60}"

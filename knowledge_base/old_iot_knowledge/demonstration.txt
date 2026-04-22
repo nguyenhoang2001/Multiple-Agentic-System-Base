@@ -1,0 +1,90 @@
+# Smart Home Agent Demonstration Examples
+# These examples show how the agent interprets user requests and maps them to device commands.
+
+---
+
+## Example 1: Turn on the lights
+User: "Turn on the lights in the living room"
+Reasoning: User wants light_living_01 enabled. No specific brightness mentioned — use default 80%.
+Command: POST /api/devices/light_living_01/control {"action": "turn_on", "brightness": 80}
+Response: "Living room light turned on at 80% brightness."
+
+---
+
+## Example 2: Set a comfortable temperature
+User: "It's too cold, make it warmer"
+Reasoning: User wants temperature raised. Current thermostat setpoint retrieved from logs. Increase by 2°C or set to comfort default of 22°C.
+Command: POST /api/devices/thermostat_01/control {"action": "set_temperature", "setpoint": 22, "mode": "heat"}
+Response: "Thermostat set to 22°C in heating mode."
+
+---
+
+## Example 3: Check sensor readings
+User: "What's the temperature in the bedroom?"
+Reasoning: Retrieve the latest reading from temp_bedroom_01 from sensor logs.
+Action: Read sensor_logs.csv, filter device_id=temp_bedroom_01, sensor_type=temperature, get latest row.
+Response: "The bedroom temperature is currently 21.3°C with 55% humidity."
+
+---
+
+## Example 4: Turn off everything before bed
+User: "I'm going to bed, goodnight"
+Reasoning: User wants to activate night mode — lights off, temperature lowered, door locked.
+Commands:
+  POST /api/devices/light_living_01/control {"action": "turn_off"}
+  POST /api/devices/light_kitchen_01/control {"action": "turn_off"}
+  POST /api/devices/thermostat_01/control {"action": "set_temperature", "setpoint": 19, "mode": "auto"}
+  POST /api/devices/door_front_01/control {"action": "lock"}
+Response: "Goodnight! Lights off, thermostat set to 19°C, and front door locked."
+
+---
+
+## Example 5: Energy check
+User: "How much power is the TV using?"
+Reasoning: Retrieve latest energy reading from plug_tv_01 sensor logs.
+Action: Read sensor_logs.csv, filter device_id=plug_tv_01, sensor_type=power, get latest row.
+Response: "The TV smart plug is currently drawing 120W."
+
+---
+
+## Example 6: Motion query
+User: "Is anyone in the living room?"
+Reasoning: Check the latest motion sensor reading from motion_living_01.
+Action: Read sensor_logs.csv, filter device_id=motion_living_01, sensor_type=motion, get latest row.
+Response: "Motion was last detected in the living room 4 minutes ago — someone is likely still there."
+
+---
+
+## Example 7: Set a scene
+User: "Movie time"
+Reasoning: Movie scene typically means dimmed warm lights and blinds closed.
+Commands:
+  POST /api/devices/light_living_01/control {"action": "set", "brightness": 20, "color_temperature": 2700}
+  POST /api/devices/blind_living_01/control {"action": "set_position", "position": 0}
+  POST /api/devices/plug_tv_01/control {"action": "turn_on"}
+Response: "Movie mode activated: lights dimmed to 20% warm white, blinds closed, TV powered on."
+
+---
+
+## Example 8: Air quality concern
+User: "The air feels stuffy in here"
+Reasoning: User is concerned about air quality. Retrieve CO2 and AQI readings. If above threshold, recommend ventilation action.
+Action: Read sensor_logs.csv, filter device_id=temp_living_01, check co2 and aqi values.
+Command (if CO2 > 1000 ppm): POST /api/devices/blind_living_01/control {"action": "set_position", "position": 50}
+Response: "CO2 is at 1340 ppm — that's elevated. I've opened the blinds halfway to increase ventilation."
+
+---
+
+## Example 9: Lock the door remotely
+User: "Did I lock the door?"
+Reasoning: Check the latest state of door_front_01 from sensor logs.
+Action: Read sensor_logs.csv, filter device_id=door_front_01, sensor_type=lock_state, get latest row.
+Response: "The front door is currently unlocked. Would you like me to lock it?"
+
+---
+
+## Example 10: Guest access
+User: "Let my guest in"
+Reasoning: Temporarily unlock the front door.
+Command: POST /api/devices/door_front_01/control {"action": "unlock", "duration_seconds": 300}
+Response: "Front door unlocked for 5 minutes. It will automatically re-lock after that."

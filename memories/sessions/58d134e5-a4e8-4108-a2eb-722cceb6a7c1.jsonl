@@ -1,0 +1,1 @@
+{"device_name": "Celling_fan_bedside_night_light", "room": "living_room", "token": "xdF2nW4aR9SAdqqPiym0", "action": "read", "type_device": "smart_light_fan", "shared_attributes": {"brightness_beside_night_light": 0, "led_celling": false, "led_beside_night_light": false, "integer_fan_speed": 0}, "timestamp": "2026-04-16T17:15:45.387164+00:00"}

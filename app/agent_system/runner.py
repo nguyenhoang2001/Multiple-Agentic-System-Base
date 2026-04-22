@@ -1,44 +1,37 @@
 """
-Runner – async interface between the FastAPI layer and the smolagents Manager Agent.
+Runner – async interface between the FastAPI layer and the IoT pipeline.
 
-smolagents' CodeAgent.run() is synchronous, so we execute it in a background
-thread and stream chunks back to the caller via an asyncio.Queue so the event
-loop stays unblocked.
+The IoT pipeline is synchronous (LLM calls + smolagents sub-agents), so we
+execute it in a background thread and stream chunks back to the caller via an
+asyncio.Queue so the event loop stays unblocked.
 
---- Official smolagents chat-history pattern ---
-From the smolagents docs (GradioUI source + memory tutorial):
+Architecture change (vs previous version)
+------------------------------------------
+The previous version used a per-session ``CodeAgent`` (the master agent) to
+orchestrate the full flow.  Small models hallucinated extra kwargs, wrote
+comments instead of calling sub-agents, and used ``pass`` to skip steps.
 
-    # First turn – reset=True clears memory (default behaviour)
-    agent.run(user_request, reset=True)
+The new version replaces the CodeAgent orchestrator with a deterministic Python
+function ``run_iot_pipeline()`` that:
+  1. Calls the LLM ONCE with Pydantic structured output to extract intent
+  2. Checks Buffer Window Memory
+  3. Delegates to clarification_agent (CodeAgent with tools) if info is missing
+  4. Calls iterate_smart_home_yaml() deterministically
+  5. Calls the LLM ONCE with Pydantic structured output to select devices
+  6. Delegates to iot_action_agent (CodeAgent) for API execution
 
-    # Subsequent turns in the same conversation – reset=False keeps memory
-    agent.run(user_request, reset=False)
+Multi-turn conversation
+-----------------------
+Chat history is loaded from the database and passed to ``_extract_intent()``
+so follow-up messages (e.g. "phòng khách" after being asked which room) are
+resolved correctly without relying on per-session agent memory.
 
-When reset=False, the agent preserves agent.memory.steps (TaskStep, ActionStep,
-PlanningStep objects) so the model sees the full conversation history naturally.
-
-Because multiple sessions can be active simultaneously we maintain a
-per-session agent cache (_SESSION_AGENTS). Each session owns its own CodeAgent
-instance so their memories never bleed into one another.
-
---- Streaming strategy ---
-agent.run(stream=True) returns a generator that yields multiple object types
-as execution progresses.  We handle each type differently:
-
-  ChatMessageStreamDelta  – individual LLM tokens yielded *during* generation.
-                            Pushing these gives real-time token-by-token output
-                            so the user sees text appearing immediately instead
-                            of waiting for the full step to finish.
-
-  FinalAnswerStep         – yielded once at the very end; its `.output` is the
-                            clean final answer string.  We use this to confirm
-                            we have a final answer and send it if no tokens were
-                            streamed (e.g. when stream_outputs is not supported).
-
-  ActionStep / others     – skipped; their content already arrived via deltas
-                            above, and re-sending observations causes duplicates.
-
-A sentinel None signals the async generator to stop.
+Streaming strategy
+------------------
+``run_iot_pipeline()`` accepts an ``on_step`` callback.  Each step emits a
+short status string (e.g. "Đang phân tích yêu cầu...\n") which the runner
+forwards to the SSE queue immediately, giving the user live feedback while the
+pipeline is running.  The final answer is sent as a ``FinalAnswer`` object.
 """
 
 from __future__ import annotations
@@ -47,61 +40,24 @@ import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from threading import Thread
 
-from dataclasses import dataclass
+from app.agent_system.memory.buffer_window import clear_buffer, set_current_session
+from app.agent_system.orchestrator import run_iot_pipeline
 
-from smolagents import CodeAgent, ToolCallingAgent
-from smolagents.models import ChatMessageStreamDelta
-from smolagents.memory import FinalAnswerStep
-
-from app.agent_system.orchestrator import manager_agent, _INSTRUCTIONS
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class FinalAnswer:
-    """The agent's executed final answer, distinct from raw LLM streaming tokens."""
-
+    """The pipeline's final answer, distinct from raw step streaming text."""
     text: str
 
 
-logger = logging.getLogger(__name__)
-
-# Per-session agent cache  {session_id_str -> CodeAgent}
-_SESSION_AGENTS: dict[str, CodeAgent] = {}
-
-
-def _make_agent() -> CodeAgent:
-    """Create a fresh per-session CodeAgent mirroring the manager_agent config."""
-    agent = CodeAgent(
-        tools=list(manager_agent.tools.values()),
-        model=manager_agent.model,
-        managed_agents=list(manager_agent.managed_agents.values()),
-        max_steps=manager_agent.max_steps,
-        additional_authorized_imports=manager_agent.authorized_imports,
-        verbosity_level=manager_agent.logger.level,
-        # instructions=_INSTRUCTIONS,
-        stream_outputs=True,  # stream code-execution print outputs
-        code_block_tags="markdown",  # qwen3 outputs ```python blocks; align parser + system prompt
-        instructions=_INSTRUCTIONS,
-    )
-    return agent
-
-
-def _get_agent(session_id: str) -> tuple[CodeAgent, bool]:
-    """
-    Return (agent, is_new) for the given session.
-    Creates a new agent the first time a session is seen.
-    """
-    if session_id not in _SESSION_AGENTS:
-        _SESSION_AGENTS[session_id] = _make_agent()
-        return _SESSION_AGENTS[session_id], True
-    return _SESSION_AGENTS[session_id], False
-
-
 def clear_session(session_id: str) -> None:
-    """Remove a session's agent from the cache (call on session delete)."""
-    _SESSION_AGENTS.pop(session_id, None)
+    """Remove session buffer from cache (call on session delete)."""
+    clear_buffer(session_id)
 
 
 async def stream_response(
@@ -110,71 +66,52 @@ async def stream_response(
     session_id: str | uuid.UUID,
 ) -> AsyncGenerator["str | FinalAnswer", None]:
     """
-    Async generator that yields text chunks as the agent processes the query.
-
-    The official smolagents pattern for multi-turn conversation:
-      - First turn  → agent.run(task, reset=True)   clears memory
-      - Follow-ups  → agent.run(task, reset=False)  keeps memory
+    Async generator that yields text chunks as the pipeline processes the query.
 
     Args:
         message:    The latest user message.
         history:    Prior turns as [{"role": "user"|"assistant", "content": str}].
-                    Used only to decide whether this is a first turn (reset=True)
-                    or a follow-up (reset=False). The actual history lives in
-                    agent.memory.steps on the cached agent instance.
-        session_id: Unique session identifier used to look up the cached agent.
+                    Passed to intent extraction for multi-turn context resolution.
+        session_id: Unique session identifier for Buffer Window Memory binding.
 
     Yields:
-        str – each text chunk (step observation or final answer).
+        str        – step status chunks (e.g. "Đang phân tích yêu cầu...\n")
+        FinalAnswer – the pipeline's final answer string
     """
     sid = str(session_id)
-    agent, is_new = _get_agent(sid)
-
-    # reset=True on the first turn of a session; reset=False afterwards
-    reset = is_new or not history
 
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    queue: asyncio.Queue[str | FinalAnswer | None] = asyncio.Queue()
 
-    # ------------------------------------------------------------------
-    # Background thread: run the synchronous CodeAgent.run(stream=True).
-    # The generator yields mixed types as each step executes:
-    #   ChatMessageStreamDelta – push .content immediately (real-time tokens)
-    #   FinalAnswerStep        – push .output as fallback / confirmation
-    #   Everything else        – skip (ActionStep, PlanningStep, ToolCall ...)
-    # ------------------------------------------------------------------
     def _run() -> None:
+        token = set_current_session(sid)
         try:
-            streamed_any_delta = False
-            final_answer_text: str | None = None
+            final_text: str | None = None
 
-            for item in agent.run(message, stream=True, reset=reset):
-                # 1. Real-time LLM token streaming
-                if isinstance(item, ChatMessageStreamDelta):
-                    if item.content:
-                        loop.call_soon_threadsafe(queue.put_nowait, item.content)
-                        streamed_any_delta = True
+            def on_step(text: str) -> None:
+                """Forward step status text to the SSE queue immediately."""
+                loop.call_soon_threadsafe(queue.put_nowait, text)
 
-                # 2. Final answer arrived — always send it as a FinalAnswer
-                #    object so the caller can store it separately from the
-                #    raw thought/code streaming tokens.
-                elif isinstance(item, FinalAnswerStep):
-                    final_answer_text = (
-                        str(item.output) if item.output is not None else ""
-                    )
-                    loop.call_soon_threadsafe(
-                        queue.put_nowait, FinalAnswer(text=final_answer_text)
-                    )
+            # Run the deterministic IoT pipeline synchronously in this thread.
+            # on_step streams intermediate status; the return value is the final answer.
+            final_text = run_iot_pipeline(
+                user_message=message,
+                history=history,
+                session_id=sid,
+                on_step=on_step,
+            )
 
-                # 3. Skip ActionStep, PlanningStep, ToolCall, ToolOutput,
-                #    ActionOutput — content already covered by deltas above.
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                FinalAnswer(text=final_text or "(No answer generated.)"),
+            )
 
-            if not streamed_any_delta and not final_answer_text:
-                loop.call_soon_threadsafe(queue.put_nowait, "(No answer generated.)")
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Agent raised an exception (session=%s)", sid)
+            logger.exception("Pipeline raised an exception (session=%s)", sid)
             loop.call_soon_threadsafe(queue.put_nowait, f"Agent error: {exc}")
         finally:
+            from app.agent_system.memory.buffer_window import current_session_id
+            current_session_id.reset(token)
             loop.call_soon_threadsafe(queue.put_nowait, None)  # sentinel
 
     thread = Thread(target=_run, daemon=True)

@@ -1,6 +1,6 @@
-# Multi-Agent System Base (MASB)
+# IoT Smart Home Agent System
 
-A FastAPI application that orchestrates a **multi-agent AI system** to answer user questions using a combination of live web search and a FAISS-backed retrieval-augmented generation (RAG) knowledge base. All agents are powered by a local or cloud LLM via [smolagents](https://github.com/huggingface/smolagents).
+A FastAPI application that orchestrates a **multi-agent AI system** to control and query smart home IoT devices via the CoreIoT (Thingsboard) API. All agents are powered by a local or cloud LLM via [smolagents](https://github.com/huggingface/smolagents).
 
 ---
 
@@ -10,224 +10,173 @@ A FastAPI application that orchestrates a **multi-agent AI system** to answer us
 User (HTTP / SSE)
        │
        ▼
-┌─────────────────────────────────────────────┐
-│              FastAPI  (app/main.py)          │
-│   POST /api/v1/chat/stream   (SSE)           │
-│   GET  /api/v1/sessions/{id}/history         │
-│   DELETE /api/v1/sessions/{id}               │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│         Runner  (app/agent_system/runner.py) │
-│  • Per-session CodeAgent cache               │
-│  • Background thread + asyncio.Queue stream  │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│     Manager Agent  (CodeAgent)               │
-│  • Delegates to sub-agents                   │
-│  • Synthesises final answer                  │
-└────────┬────────────────┬────────────────────┘
-         │                │
-         ▼                ▼
-┌─────────────┐  ┌──────────────────────────────┐
-│  Web Agent  │  │       Retriever Agent         │
-│ (DuckDuckGo │  │ (FAISS + sentence-transformers│
-│  search)    │  │  over HuggingFace docs)        │
-└─────────────┘  └──────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                FastAPI  (app/main.py)                    │
+│   POST /api/v1/chat/stream   (SSE)                       │
+│   GET  /api/v1/sessions/{id}/history                     │
+│   DELETE /api/v1/sessions/{id}                           │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│          Runner  (app/agent_system/runner.py)            │
+│  • Per-session CodeAgent cache                           │
+│  • Background thread + asyncio.Queue stream              │
+│  • BufferWindowMemory session binding                    │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│          Manager Agent  (CodeAgent)                      │
+│  Tools: iterate_smart_home_yaml, check_buffer_window     │
+│  8-step orchestration flow                               │
+└───────┬──────────────────┬────────────────┬─────────────┘
+        │                  │                │
+        ▼                  ▼                ▼
+┌──────────────┐  ┌─────────────────┐  ┌───────────────────┐
+│Clarification │  │ Retriever Agent │  │ IoT Action Agent  │
+│    Agent     │  │ (device-selector│  │   (CodeAgent)     │
+│(ToolCalling) │  │  ToolCalling,   │  │  read/post to     │
+│buffer+yaml   │  │  no tools)      │  │  CoreIoT API      │
+└──────────────┘  └─────────────────┘  └─────────┬─────────┘
+                                                  │
+                                                  ▼
+                                        ┌──────────────────┐
+                                        │  CoreIoT API     │
+                                        │  (Thingsboard)   │
+                                        │  GET/POST attrs  │
+                                        └──────────────────┘
 ```
 
-### Component overview
+### 8-step flow
 
-| Component                | File                                         | Purpose                                            |
-| ------------------------ | -------------------------------------------- | -------------------------------------------------- |
-| **FastAPI app**          | `app/main.py`                                | Entry point; pre-warms FAISS on startup            |
-| **Chat router**          | `app/routers/chat.py`                        | SSE streaming endpoint + session history/delete    |
-| **Health router**        | `app/routers/health.py`                      | `GET /api/v1/health` liveness check                |
-| **Manager agent**        | `app/agent_system/orchestrator.py`           | Top-level `CodeAgent` that plans and delegates     |
-| **Runner**               | `app/agent_system/runner.py`                 | Async bridge; one `CodeAgent` per session          |
-| **LLM model**            | `app/agent_system/model.py`                  | Shared `OpenAIServerModel` (local Ollama or cloud) |
-| **Web agent**            | `app/agent_system/agents/web_agent.py`       | `ToolCallingAgent` with DuckDuckGo search          |
-| **Retriever agent**      | `app/agent_system/agents/retriever_agent.py` | `ToolCallingAgent` backed by FAISS                 |
-| **Vector store**         | `app/vectore_store/`                         | FAISS build, load, embed via `thenlper/gte-small`  |
-| **Knowledge base**       | `knowledge_base/sources.py`                  | Loads `m-ric/huggingface_doc` HuggingFace dataset  |
-| **DB sessions/messages** | `app/repositories/`                          | PostgreSQL via SQLAlchemy async + Alembic          |
+1. **Parse intent** — extract `room_name` and `type_device` from the message
+2. **Check buffer** — `check_buffer_window()` looks up recently-used devices
+3. **Clarify** — if info still missing, delegate to `clarification_agent` → return question to user
+4. **Iterate YAML** — `iterate_smart_home_yaml(room_name, type_device)` fetches matching device config
+5. **Select device** — `retriever_agent` parses the YAML and returns `[{name_device, token, room, shared_attributes}]`
+6. **Execute** — `iot_action_agent` calls `post_shared_attributes` (write) or `read_shared_attributes` (read)
+7. **Update buffer** — successful writes are recorded in `BufferWindowMemory` (per-session FIFO)
+8. **Reply** — Vietnamese/English summary returned to user
+
+---
+
+## Component Overview
+
+| Component | File | Purpose |
+|---|---|---|
+| **FastAPI app** | `app/main.py` | Entry point; pre-warms FAISS on startup |
+| **Chat router** | `app/routers/chat.py` | SSE streaming endpoint + session history/delete |
+| **Manager agent** | `app/agent_system/orchestrator.py` | Top-level `CodeAgent` — 8-step IoT orchestration |
+| **Runner** | `app/agent_system/runner.py` | Async bridge; one `CodeAgent` per session |
+| **LLM model** | `app/agent_system/model.py` | Shared `OpenAIServerModel` (Ollama local or cloud) |
+| **Clarification agent** | `app/agent_system/agents/clarification_agent.py` | Resolves ambiguous device references |
+| **Retriever agent** | `app/agent_system/agents/retriever_agent.py` | Selects exact device from YAML subset |
+| **IoT action agent** | `app/agent_system/agents/iot_action_agent.py` | Executes CoreIoT read/write API calls |
+| **Web agent** | `app/agent_system/agents/web_agent.py` | DuckDuckGo search for general questions |
+| **YAML iterator** | `app/agent_system/tools/yaml_iterator.py` | Filters device config by room + type |
+| **IoT action tools** | `app/agent_system/tools/iot_action_tools.py` | Tool wrappers for CoreIoT GET/POST |
+| **Thingsboard API** | `app/agent_system/tools/thingsboard_api.py` | Raw HTTP helpers for CoreIoT |
+| **Buffer window** | `app/agent_system/memory/buffer_window.py` | Per-session FIFO of recent device actions |
+| **Vector store** | `app/vectore_store/` | FAISS with manifest-based auto-rebuild |
+| **Knowledge base** | `knowledge_base/iot_knowledge/` | Automation rules + worked examples |
+| **Device registry** | `knowledge_base/iot_knowledge/smart_home_configuration.yaml` | Tokens + rooms (never embedded) |
+| **DB** | `app/repositories/` | PostgreSQL via SQLAlchemy async + Alembic |
+
+---
+
+## Quick Start
+
+See [docs/running_the_app.md](docs/running_the_app.md) for the full step-by-step guide.
+
+### Method 1: Using the Start Script (Recommended)
+
+We provide a single script to automatically start the database, run migrations, and launch both the backend API and frontend web interface together.
+
+```bash
+# 1. Activate venv
+source .IotAgent_venv/bin/activate
+
+# 2. Install deps (First time only)
+pip install -r requirements.txt
+
+# 3. Configure env vars (First time only)
+cp .env.example .env   # then edit with your values
+
+# 4. Pull LLM (If using local)
+ollama pull gemma4:e2b && ollama serve
+
+# 5. Make the script executable and run it
+chmod +x start.sh
+./start.sh
+```
+
+**The system will be available at:**
+* **Web Chat (Frontend):** `http://localhost:3000`
+* **Backend API:** `http://localhost:8000`
+
+*Press `Ctrl + C` to securely gracefully stop both the system and the database connection.*
+
+---
+
+### Method 2: Manual Setup
+
+```bash
+# 1. Activate venv
+source .IotAgent_venv/bin/activate
+
+# 2. Install deps
+pip install -r requirements.txt
+
+# 3. Configure
+cp .env.example .env   # then edit with your values
+
+# 4. Start PostgreSQL
+docker compose up postgres -d
+
+# 5. Pull LLM
+ollama pull gemma4:e2b && ollama serve
+
+# 6. Migrate DB
+alembic upgrade head
+
+# 7. Start server (FAISS builds automatically on first run)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 8. Start the web frontend (in a new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+The web interface will be available at `http://localhost:3000`.
 
 ---
 
 ## API Endpoints
 
-### `POST /api/v1/chat/stream`
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/chat/stream` | Stream agent reply via SSE |
+| `GET` | `/api/v1/sessions/{id}/history` | Fetch conversation history |
+| `DELETE` | `/api/v1/sessions/{id}` | Delete session |
+| `GET` | `/api/v1/health` | Health check |
 
-Stream an agent reply via **Server-Sent Events (SSE)**.
-
-**Request body**
-
-```json
-{
-  "session_id": "<uuid>",
-  "user_id": "alice",
-  "message": "What is PEFT and how does it work?"
-}
-```
-
-**SSE event stream**
-
-| Event                   | Payload                 | When                  |
-| ----------------------- | ----------------------- | --------------------- |
-| `agent.message.delta`   | `{"text": "..."}`       | Each streamed chunk   |
-| `agent.message.done`    | `{"session_id": "..."}` | Reply fully persisted |
-| `agent.workflow.failed` | `{"error": "..."}`      | Unhandled error       |
-| `heartbeat`             | `{}`                    | Every 15 s while open |
-
-**Example**
+### curl example
 
 ```bash
-SESSION_ID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+SESSION_ID="00000000-0000-0000-0000-000000000001"
 
 curl -X POST http://localhost:8000/api/v1/chat/stream \
   -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -N \
-  -d "{\"session_id\": \"$SESSION_ID\", \"user_id\": \"alice\", \"message\": \"What is PEFT?\"}"
+  -H "Accept: text/event-stream" -N \
+  -d "{\"session_id\": \"$SESSION_ID\", \"user_id\": \"test\", \"message\": \"bật đèn trần phòng khách\"}"
+
+curl -X POST http://localhost:8000/api/v1/chat/stream \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" -N \
+  -d "{\"session_id\": \"$SESSION_ID\", \"user_id\": \"test\", \"message\": \"TĂT đèn trần hồi nãy cho tôi\"}"
 ```
-
----
-
-### `GET /api/v1/sessions/{session_id}/history?user_id=alice`
-
-Retrieve the full message history for a session.
-
-**Response**
-
-```json
-{
-  "session_id": "<uuid>",
-  "messages": [
-    { "role": "user", "content": "...", "created_at": "..." },
-    { "role": "assistant", "content": "...", "created_at": "..." }
-  ]
-}
-```
-
----
-
-### `DELETE /api/v1/sessions/{session_id}?user_id=alice`
-
-Delete a session and all its messages. Also evicts the cached agent from memory.
-
----
-
-## Prerequisites
-
-| Requirement | Version                     |
-| ----------- | --------------------------- |
-| Python      | 3.11+                       |
-| PostgreSQL  | 15+ (or use Docker)         |
-| Ollama      | Latest (for local LLM mode) |
-
----
-
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/nguyenhoang2001/Multiple-Agentic-System-Base.git
-cd Multiple-Agentic-System-Base
-```
-
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Configure environment
-
-Copy `.env` and fill in the values:
-
-```bash
-cp .env.example .env   # or create .env manually
-```
-
-**.env variables**
-
-```env
-# Database
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/mars
-
-# LLM mode: "local" (Ollama) or "cloud" (Ollama Cloud API)
-OLLAMA_MODE=local
-LLM_MODEL_ID=qwen3:1.7b
-LLAMA_SERVER_URL=http://localhost:11434/v1
-OLLAMA_API_KEY=                          # only needed for cloud mode
-
-# Vector store
-EMBEDDING_MODEL_NAME=thenlper/gte-small
-FAISS_INDEX_PATH=./faiss_index
-CHUNK_SIZE=200
-CHUNK_OVERLAP=20
-
-# HuggingFace (for downloading the knowledge base dataset)
-HF_TOKEN=hf_...
-```
-
-### 4. Start PostgreSQL
-
-```bash
-docker compose up postgres -d
-```
-
-Or point `DATABASE_URL` at any running PostgreSQL instance.
-
-### 5. Run database migrations
-
-```bash
-alembic upgrade head
-```
-
-### 6. Start the local LLM (local mode only)
-
-```bash
-ollama pull qwen3:1.7b
-ollama serve
-```
-
-### 7. Build the vector store (first time only)
-
-```bash
-python -c "from app.vectore_store.builder import build_and_save; build_and_save()"
-```
-
-This downloads the `m-ric/huggingface_doc` dataset, splits it into chunks, embeds them with `thenlper/gte-small`, and saves the FAISS index to `faiss_index/`.
-
-### 8. Start the server
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
----
-
-## Docker (full stack)
-
-Run the entire stack (PostgreSQL + app) with a single command:
-
-```bash
-docker compose up --build
-```
-
-This will:
-
-1. Start PostgreSQL on port `5432`
-2. Build the app image
-3. Run `alembic upgrade head`
-4. Start the API on port `8000`
-
-> **Note:** You still need a running Ollama instance accessible from within Docker, or switch to `OLLAMA_MODE=cloud` in your `.env`.
 
 ---
 
@@ -235,96 +184,33 @@ This will:
 
 ### Local Ollama (default)
 
-Runs models locally via [Ollama](https://ollama.com/).
-
 ```env
 OLLAMA_MODE=local
-LLM_MODEL_ID=qwen3:1.7b
+LLM_MODEL_ID=gemma4:e2b
 LLAMA_SERVER_URL=http://localhost:11434/v1
 ```
 
-Recommended local models:
-
-- `qwen3:1.7b` — fast, lightweight (1.4 GB)
-- `qwen3:latest` — better quality (5.2 GB)
-- `gemma3:4b` — Google's Gemma (3.3 GB)
+Recommended models: `gemma4:e2b`, `qwen3:1.7b`, `qwen3:4b`
 
 ### Ollama Cloud API
-
-Uses large cloud-hosted models without local download.
 
 ```env
 OLLAMA_MODE=cloud
 LLM_MODEL_ID=gpt-oss:20b-cloud
-OLLAMA_API_KEY=your_key_from_https://ollama.com/settings/keys
-```
-
-Available cloud models: https://ollama.com/search?c=cloud
-
----
-
-## Agent System
-
-### Manager Agent (`CodeAgent`)
-
-The top-level orchestrator. It:
-
-- Receives the user query
-- Plans which sub-agent(s) to invoke
-- Delegates via tool calls to sub-agents
-- Synthesises all results into a final answer via `final_answer(...)`
-
-### Web Agent (`ToolCallingAgent`)
-
-- **Tool:** DuckDuckGo search
-- **Use case:** Real-time facts, news, locations, anything not in the knowledge base
-- **Name:** `search_agent`
-
-### Retriever Agent (`ToolCallingAgent`)
-
-- **Tool:** FAISS semantic search over the knowledge base
-- **Knowledge base:** HuggingFace documentation (`m-ric/huggingface_doc`)
-- **Embeddings:** `thenlper/gte-small` (sentence-transformers)
-- **Use case:** HuggingFace ecosystem questions, PEFT, transformers, datasets, etc.
-- **Name:** `retriever_agent`
-
-### Session Memory
-
-Each session gets its own `CodeAgent` instance cached in memory. Multi-turn conversations are supported via smolagents' `reset=False` pattern — the agent retains `memory.steps` across turns within a session.
-
----
-
-## Extending the Knowledge Base
-
-Add new document sources in `knowledge_base/sources.py`:
-
-```python
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
-
-def load_documents():
-    hf_docs = _load_hf_dataset()
-
-    # Add local text files
-    dir_loader = DirectoryLoader("knowledge_base/files/", glob="**/*.txt",
-                                 loader_cls=TextLoader)
-    local_docs = dir_loader.load()
-
-    return hf_docs + local_docs
-```
-
-Then rebuild the index:
-
-```bash
-python -c "from app.vectore_store.builder import build_and_save; build_and_save()"
+OLLAMA_API_KEY=<key from https://ollama.com/settings/keys>
 ```
 
 ---
 
-## Running Tests
+## Knowledge Base
 
-```bash
-pytest
-```
+See [docs/vector_store_and_knowledge_base.md](docs/vector_store_and_knowledge_base.md) for details.
+
+- `knowledge_base/iot_knowledge/rule/automation_rules.txt` — semantic rules → embedded into FAISS
+- `knowledge_base/iot_knowledge/demonstration/examples.txt` — worked examples → embedded into FAISS
+- `knowledge_base/iot_knowledge/smart_home_configuration.yaml` — device tokens → **NOT embedded**
+
+The FAISS index auto-rebuilds when any `.txt` file changes (manifest-tracked).
 
 ---
 
@@ -332,52 +218,55 @@ pytest
 
 ```
 ├── app/
-│   ├── main.py                        # FastAPI app entry point
+│   ├── main.py
 │   ├── agent_system/
-│   │   ├── model.py                   # Shared LLM (local Ollama or cloud)
-│   │   ├── orchestrator.py            # Manager CodeAgent + prompt instructions
-│   │   ├── runner.py                  # Async streaming bridge (per-session agents)
+│   │   ├── model.py                        # Shared LLM
+│   │   ├── orchestrator.py                 # Master CodeAgent (8-step flow)
+│   │   ├── runner.py                       # Async streaming bridge
 │   │   ├── agents/
-│   │   │   ├── web_agent.py           # DuckDuckGo web search agent
-│   │   │   └── retriever_agent.py     # FAISS retriever agent
-│   │   └── tools/
-│   │       ├── web_tools.py           # DuckDuckGo + VisitWebpage tools
-│   │       └── retriever_tools.py     # FAISS semantic search tool
+│   │   │   ├── clarification_agent.py      # Resolves ambiguous queries
+│   │   │   ├── retriever_agent.py          # Device-selector from YAML
+│   │   │   ├── iot_action_agent.py         # CoreIoT API executor
+│   │   │   └── web_agent.py               # Web search
+│   │   ├── tools/
+│   │   │   ├── yaml_iterator.py           # YAML device filter
+│   │   │   ├── iot_action_tools.py        # CoreIoT Tool wrappers
+│   │   │   ├── thingsboard_api.py         # Raw HTTP helpers
+│   │   │   ├── buffer_window_tools.py     # Buffer lookup tool
+│   │   │   ├── retriever_tools.py         # FAISS retriever tool
+│   │   │   ├── conversation_history_tool.py
+│   │   │   └── web_tools.py
+│   │   └── memory/
+│   │       └── buffer_window.py           # Per-session action FIFO
 │   ├── routers/
-│   │   ├── chat.py                    # SSE chat endpoint + history/delete
-│   │   └── health.py                  # Liveness check
 │   ├── vectore_store/
-│   │   ├── builder.py                 # Build & persist FAISS index
-│   │   ├── embeddings.py              # sentence-transformers embeddings
-│   │   ├── loader.py                  # Load persisted FAISS index
-│   │   └── store.py                   # Lazy singleton vector store
-│   ├── db/                            # SQLAlchemy engine + async session
-│   ├── models/                        # ORM models (ChatSession, ChatMessage)
-│   └── repositories/                  # DB access layer (session, message)
+│   ├── db/
+│   ├── models/
+│   └── repositories/
 ├── knowledge_base/
-│   ├── sources.py                     # Document sources for the knowledge base
-│   └── files/                         # Drop local files here for indexing
-├── alembic/                           # DB migrations
-├── faiss_index/                       # Persisted FAISS index (generated)
+│   ├── sources.py
+│   └── iot_knowledge/
+│       ├── smart_home_configuration.yaml  # Device registry (tokens)
+│       ├── rule/automation_rules.txt
+│       └── demonstration/examples.txt
+├── faiss_index/                           # Auto-generated
+├── alembic/
 ├── docker-compose.yml
-├── Dockerfile
 ├── requirements.txt
-└── pytest.ini
+└── .env.example
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer            | Technology                                   |
-| ---------------- | -------------------------------------------- |
-| API framework    | FastAPI + uvicorn                            |
-| Agent framework  | smolagents (HuggingFace)                     |
-| LLM              | Ollama (local) or Ollama Cloud               |
-| Vector search    | FAISS + LangChain                            |
-| Embeddings       | `thenlper/gte-small` (sentence-transformers) |
-| Knowledge base   | `m-ric/huggingface_doc` HuggingFace dataset  |
-| Web search       | DuckDuckGo (via smolagents)                  |
-| Database         | PostgreSQL + SQLAlchemy async + Alembic      |
-| Streaming        | Server-Sent Events (SSE) via `sse-starlette` |
-| Containerisation | Docker + Docker Compose                      |
+| Layer | Technology |
+|---|---|
+| API framework | FastAPI + uvicorn |
+| Agent framework | smolagents (HuggingFace) |
+| LLM | Ollama (local) or Ollama Cloud |
+| IoT platform | CoreIoT / Thingsboard |
+| Vector search | FAISS + LangChain |
+| Embeddings | sentence-transformers (HuggingFace) |
+| Database | PostgreSQL + SQLAlchemy async + Alembic |
+| Streaming | Server-Sent Events via `sse-starlette` |

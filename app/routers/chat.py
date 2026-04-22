@@ -17,6 +17,7 @@ from app.repositories.session_repo import (
     get_session,
 )
 from app.agent_system.runner import clear_session, stream_response, FinalAnswer
+from app.vectore_store.conversation_memory import async_save_conversation
 
 router = APIRouter(prefix="/api/v1")
 
@@ -35,10 +36,10 @@ class ChatRequest(BaseModel):
 # ── SSE helpers ───────────────────────────────────────────────────────────────
 
 
-def _delta_event(text: str) -> ServerSentEvent:
+def _delta_event(text: str, is_final: bool = False) -> ServerSentEvent:
     return ServerSentEvent(
         event="agent.message.delta",
-        data=json.dumps({"text": text}),
+        data=json.dumps({"text": text, "is_final": is_final}, ensure_ascii=False),
     )
 
 
@@ -107,10 +108,10 @@ async def chat_stream(body: ChatRequest):
                         # capture it separately for clean DB storage.
                         final_answer_text = chunk.text
                         if chunk.text:
-                            await queue.put(_delta_event(chunk.text))
+                            await queue.put(_delta_event(chunk.text, is_final=True))
                     else:
                         reply_chunks.append(chunk)
-                        await queue.put(_delta_event(chunk))
+                        await queue.put(_delta_event(chunk, is_final=False))
 
                 # 5. Persist ONLY the executed final answer to DB.
                 #    Fall back to joined deltas if the agent never called
@@ -125,7 +126,16 @@ async def chat_stream(body: ChatRequest):
                 )
                 await db.commit()
 
-                # 6. Signal completion
+                # 6. Embed the conversation turn in a thread-pool executor so
+                #    the event loop stays unblocked, but we await completion so
+                #    the history is guaranteed to be stored before the next request.
+                await async_save_conversation(
+                    inputs={"input": body.message},
+                    outputs={"output": full_reply},
+                    session_id=str(session_id),
+                )
+
+                # 7. Signal completion
                 await queue.put(_done_event(body.session_id))
 
             except Exception as exc:  # noqa: BLE001

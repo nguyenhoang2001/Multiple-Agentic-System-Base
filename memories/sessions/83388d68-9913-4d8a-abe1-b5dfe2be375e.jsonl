@@ -1,0 +1,2 @@
+{"device_name": "living_room_ceiling_light_fan", "room": "living_room", "token": "xdF2nW4aR9SAdqqPiym0", "action": "post", "type_device": "smart_light_fan", "shared_attributes": {"living_ceiling_fan_speed": 3}, "timestamp": "2026-04-17T01:31:00.951175+00:00"}
+{"device_name": "indoor_temperature_humidity_sensor", "room": "indoor_environment", "token": "xdF2nW4aR9SAdqqPiym0", "action": "read", "type_device": "temperature_humidity", "shared_attributes": {"indoor_humidity": 60.19411087, "indoor_temperature": 23.86131287}, "timestamp": "2026-04-17T01:31:01.238639+00:00"}

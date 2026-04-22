@@ -1,0 +1,107 @@
+# IoT Device Registry
+# Format: device_id | name | type | location | capabilities | status
+
+device_id: light_living_01
+name: Living Room Main Light
+type: smart_light
+location: living_room
+capabilities: on/off, brightness (0-100%), color_temperature (2700K-6500K)
+status: online
+
+device_id: light_bedroom_01
+name: Bedroom Ceiling Light
+type: smart_light
+location: bedroom
+capabilities: on/off, brightness (0-100%)
+status: online
+
+device_id: light_kitchen_01
+name: Kitchen Under-Cabinet Light
+type: smart_light
+location: kitchen
+capabilities: on/off, brightness (0-100%)
+status: online
+
+device_id: thermostat_01
+name: Main Thermostat
+type: thermostat
+location: hallway
+capabilities: temperature_control (16-30°C), mode (heat/cool/auto/off), schedule
+status: online
+
+device_id: motion_living_01
+name: Living Room Motion Sensor
+type: motion_sensor
+location: living_room
+capabilities: motion_detection, occupancy_state
+status: online
+
+device_id: motion_entrance_01
+name: Entrance Motion Sensor
+type: motion_sensor
+location: entrance
+capabilities: motion_detection, occupancy_state
+status: online
+
+device_id: temp_bedroom_01
+name: Bedroom Temperature & Humidity Sensor
+type: climate_sensor
+location: bedroom
+capabilities: temperature (°C), humidity (%), air_quality_index
+status: online
+
+device_id: temp_living_01
+name: Living Room Climate Sensor
+type: climate_sensor
+location: living_room
+capabilities: temperature (°C), humidity (%), co2_ppm
+status: online
+
+device_id: door_front_01
+name: Front Door Lock
+type: smart_lock
+location: entrance
+capabilities: lock/unlock, access_log, auto_lock_timer
+status: online
+
+device_id: camera_entrance_01
+name: Entrance Camera
+type: security_camera
+location: entrance
+capabilities: live_feed, motion_recording, night_vision
+status: online
+
+device_id: plug_tv_01
+name: TV Smart Plug
+type: smart_plug
+location: living_room
+capabilities: on/off, energy_monitoring (W, kWh)
+status: online
+
+device_id: plug_fridge_01
+name: Fridge Smart Plug
+type: smart_plug
+location: kitchen
+capabilities: on/off, energy_monitoring (W, kWh)
+status: online
+
+device_id: blind_living_01
+name: Living Room Smart Blinds
+type: smart_blind
+location: living_room
+capabilities: open/close, position (0-100%), tilt
+status: online
+
+device_id: speaker_living_01
+name: Living Room Smart Speaker
+type: smart_speaker
+location: living_room
+capabilities: play/pause, volume (0-100%), media_source
+status: online
+
+device_id: speaker_living_02
+name: Bed Room Smart Speaker
+type: smart_speaker
+location: bedroom
+capabilities: play/pause, volume (0-100%), media_source
+status: online

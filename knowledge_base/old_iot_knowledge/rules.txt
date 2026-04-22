@@ -1,0 +1,98 @@
+# Smart Home Automation Rules
+# Format: rule_id | trigger | condition | action | priority
+
+rule_id: R001
+name: Welcome Home Lighting
+trigger: motion_detected on motion_entrance_01
+condition: door_front_01 state == unlocked AND time is between 18:00 and 23:00
+action: turn_on light_living_01 brightness=80%, turn_on light_kitchen_01 brightness=60%
+priority: high
+description: When someone arrives home in the evening, turn on the main lights.
+
+rule_id: R002
+name: Auto-Off Empty Room Lights
+trigger: no motion detected on motion_living_01 for 15 minutes
+condition: light_living_01 state == on
+action: turn_off light_living_01
+priority: medium
+description: Turn off living room lights when no one is present for 15 minutes.
+
+rule_id: R003
+name: Morning Wake-Up Scene
+trigger: schedule at 07:00 on weekdays
+condition: none
+action: set light_bedroom_01 brightness=30% color_temp=3000K, set thermostat_01 setpoint=22°C mode=heat
+priority: high
+description: Gradually increase bedroom light and warm the home before the occupant wakes.
+
+rule_id: R004
+name: Night Mode
+trigger: schedule at 23:00
+condition: none
+action: turn_off light_living_01, turn_off light_kitchen_01, set thermostat_01 setpoint=19°C mode=auto, lock door_front_01
+priority: high
+description: Automatically secure and set the home to nighttime mode.
+
+rule_id: R005
+name: Overheating Alert
+trigger: temperature reading from temp_living_01 OR temp_bedroom_01 > 30°C
+condition: thermostat_01 mode != cool
+action: set thermostat_01 mode=cool setpoint=24°C, send_notification "High temperature alert: {device_id} reading {value}°C"
+priority: critical
+description: Switch HVAC to cooling and alert the user when temperature exceeds safe threshold.
+
+rule_id: R006
+name: Poor Air Quality Ventilation
+trigger: co2 reading from temp_living_01 > 1200 ppm OR aqi > 150
+condition: none
+action: set blind_living_01 position=100% (open), send_notification "Air quality alert: CO2={co2_value} ppm or AQI={aqi_value}"
+priority: high
+description: Open blinds for ventilation when CO2 or AQI levels become unhealthy.
+
+rule_id: R007
+name: Energy Saving — Idle Appliance Detection
+trigger: plug_tv_01 power_draw < 2W for 30 minutes
+condition: plug_tv_01 state == on AND time is between 00:00 and 08:00
+action: turn_off plug_tv_01, send_notification "TV was left on standby overnight — turned off to save energy."
+priority: low
+description: Cut power to the TV when it's in standby overnight.
+
+rule_id: R008
+name: Smart Blinds — Anti-Glare
+trigger: lux level detected by external sensor > 50000 lux (bright sunlight)
+condition: time is between 10:00 and 16:00
+action: set blind_living_01 position=30% tilt=50%
+priority: medium
+description: Partially close blinds to reduce glare on screens during peak sun hours.
+
+rule_id: R009
+name: Security — Unexpected Motion at Night
+trigger: motion_detected on motion_entrance_01 OR motion_living_01
+condition: door_front_01 state == locked AND time is between 00:00 and 06:00
+action: turn_on light_living_01 brightness=100%, start_recording camera_entrance_01, send_notification "Security alert: Motion detected at {device_id} at {timestamp}"
+priority: critical
+description: Alert the user and start recording when motion is detected at night with the door locked.
+
+rule_id: R010
+name: Humidity Control
+trigger: humidity reading > 70%
+condition: none
+action: send_notification "High humidity alert: {device_id} reading {value}%RH — consider ventilation."
+priority: medium
+description: Notify the user when humidity exceeds mould-risk threshold.
+
+rule_id: R011
+name: Good Morning — Circadian Light
+trigger: schedule at 06:30 on weekdays
+condition: none
+action: set light_bedroom_01 brightness=20% color_temp=2700K, ramp_up brightness to 70% over 20 minutes, set color_temp to 5000K over 20 minutes
+priority: medium
+description: Simulate sunrise with a warm-to-cool light ramp to support natural waking.
+
+rule_id: R012
+name: Guest Mode
+trigger: voice_command "activate guest mode" OR app_trigger "guest_mode"
+condition: none
+action: set light_living_01 brightness=70% color_temp=3500K, set thermostat_01 setpoint=22°C, unlock door_front_01 for 5 minutes
+priority: medium
+description: Prepare the home for guests with comfortable settings and temporary door unlock.

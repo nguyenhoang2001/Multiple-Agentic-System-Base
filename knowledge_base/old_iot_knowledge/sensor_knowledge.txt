@@ -1,0 +1,101 @@
+# IoT Sensor Knowledge Base
+# Describes sensor types, reading ranges, normal thresholds, and interpretation guidelines.
+
+## Motion Sensor
+type: motion_sensor
+technology: PIR (Passive Infrared)
+output: binary (motion_detected: true/false)
+detection_range: 6 metres, 120° angle
+response_time: < 1 second
+cooldown_period: 30 seconds after last motion
+normal_behaviour: Triggers when a person moves within range; resets after cooldown.
+use_cases: occupancy detection, automatic lighting, security alerts
+
+## Temperature Sensor
+type: temperature_sensor
+technology: NTC thermistor / digital I2C
+unit: Celsius (°C)
+range: -10°C to 60°C
+accuracy: ±0.5°C
+normal_indoor_range: 18°C – 26°C
+comfort_range: 20°C – 24°C
+alert_threshold_high: > 30°C (possible overheating)
+alert_threshold_low: < 14°C (too cold, possible heating malfunction)
+use_cases: thermostat control, HVAC automation, anomaly detection
+
+## Humidity Sensor
+type: humidity_sensor
+technology: capacitive
+unit: Percent Relative Humidity (%RH)
+range: 0% – 100%
+accuracy: ±3%RH
+normal_indoor_range: 30% – 60%
+alert_threshold_high: > 70% (mould risk)
+alert_threshold_low: < 25% (too dry, discomfort)
+use_cases: HVAC control, comfort optimisation, mould prevention
+
+## CO2 Sensor
+type: co2_sensor
+technology: NDIR (Non-Dispersive Infrared)
+unit: ppm (parts per million)
+outdoor_baseline: ~420 ppm
+good_air_quality: < 800 ppm
+moderate_air_quality: 800 – 1200 ppm
+poor_air_quality: > 1200 ppm (ventilation recommended)
+hazardous: > 2000 ppm (open windows immediately)
+use_cases: ventilation control, air quality alerts, occupancy estimation
+
+## Air Quality Index (AQI)
+type: aqi_sensor
+technology: electrochemical / optical particle counter
+unit: AQI (0–500 scale)
+good: 0 – 50
+moderate: 51 – 100
+unhealthy_for_sensitive: 101 – 150
+unhealthy: 151 – 200
+very_unhealthy: 201 – 300
+hazardous: > 300
+use_cases: air purifier control, ventilation alerts, health monitoring
+
+## Smart Light (Actuator)
+type: smart_light
+technology: LED with PWM dimming
+brightness_unit: percentage (0–100%)
+color_temperature_unit: Kelvin (K)
+warm_white: 2700K – 3000K (relaxation, evening)
+neutral_white: 3500K – 4500K (task work)
+cool_white: 5000K – 6500K (focus, morning)
+energy_consumption: 8W – 15W typical
+use_cases: scene control, circadian rhythm support, occupancy-based automation
+
+## Thermostat (Actuator)
+type: thermostat
+technology: digital relay control + PID
+setpoint_range: 16°C – 30°C
+modes: heat, cool, auto, off
+auto_mode_behaviour: Switches between heat and cool to maintain setpoint within ±0.5°C.
+schedule_support: yes (7-day programmable)
+use_cases: energy saving, comfort scheduling, temperature-event reactions
+
+## Smart Lock
+type: smart_lock
+technology: motorised deadbolt + BLE/Z-Wave
+states: locked, unlocked
+auto_lock_delay: configurable (30s – 10 min)
+access_methods: PIN code, mobile app, voice command, auto-unlock on proximity
+audit_log: yes (timestamp + method for each event)
+use_cases: security, access control, guest management
+
+## Smart Plug
+type: smart_plug
+technology: relay + energy metering chip (e.g. ADE7953)
+energy_monitoring: real-time power (W), cumulative energy (kWh)
+max_load: 2300W (10A at 230V)
+use_cases: appliance control, energy monitoring, overload protection
+
+## Smart Blind
+type: smart_blind
+technology: tubular motor + hall-effect encoder
+position_unit: percentage (0% = fully closed, 100% = fully open)
+tilt_unit: percentage (0% = horizontal, 100% = vertical)
+use_cases: solar shading, privacy control, glare reduction, circadian lighting

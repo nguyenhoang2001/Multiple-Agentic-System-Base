@@ -1,0 +1,89 @@
+# Device Sensor Types
+# Maps each device type to the sensor_type fields it exposes via the hub API.
+# Use these sensor_type values when querying the sensor_logs_reader tool.
+#
+# Format:
+#   device_type: <type>
+#   sensor_types: <comma-separated list of sensor_type names>
+#   description: <what each sensor_type represents>
+
+# ─────────────────────────────────────────────
+# Smart Light  (device IDs: light_living_01, light_bedroom_01, light_kitchen_01)
+# ─────────────────────────────────────────────
+device_type: smart_light
+sensor_types: state, brightness, color_temperature, power
+  state             – current on/off status of the light ("on" or "off")
+  brightness        – light intensity as a percentage (0–100 %)
+  color_temperature – colour warmth in Kelvin (2700 K warm white – 6500 K cool white)
+  power             – real-time power draw in Watts (W)
+
+# ─────────────────────────────────────────────
+# Thermostat  (device IDs: thermostat_01)
+# ─────────────────────────────────────────────
+device_type: thermostat
+sensor_types: temperature, setpoint, mode, humidity
+  temperature – current ambient temperature in °C (measured by the device)
+  setpoint    – target temperature the thermostat is trying to reach (°C)
+  mode        – operating mode: heat | cool | auto | off
+  humidity    – relative humidity at the thermostat location (%)
+
+# ─────────────────────────────────────────────
+# Climate Sensor  (device IDs: temp_bedroom_01, temp_living_01)
+# ─────────────────────────────────────────────
+device_type: climate_sensor
+sensor_types: temperature, humidity, air_quality_index, co2_ppm
+  temperature        – ambient temperature in °C
+  humidity           – relative humidity (%RH)
+  air_quality_index  – AQI score (0–500; only on temp_bedroom_01)
+  co2_ppm            – CO₂ concentration in parts per million (only on temp_living_01)
+
+# ─────────────────────────────────────────────
+# Motion Sensor  (device IDs: motion_living_01, motion_entrance_01)
+# ─────────────────────────────────────────────
+device_type: motion_sensor
+sensor_types: motion_detected, occupancy_state
+  motion_detected – boolean; true when motion is currently detected
+  occupancy_state – human-readable occupancy: "occupied" or "unoccupied"
+
+# ─────────────────────────────────────────────
+# Smart Lock  (device IDs: door_front_01)
+# ─────────────────────────────────────────────
+device_type: smart_lock
+sensor_types: lock_state, last_access
+  lock_state  – current state: "locked" or "unlocked"
+  last_access – ISO-8601 timestamp of the most recent lock/unlock event
+
+# ─────────────────────────────────────────────
+# Security Camera  (device IDs: camera_entrance_01)
+# ─────────────────────────────────────────────
+device_type: security_camera
+sensor_types: status, motion_detected
+  status          – camera operational state: "active" or "inactive"
+  motion_detected – boolean; true when the camera detects movement
+
+# ─────────────────────────────────────────────
+# Smart Plug  (device IDs: plug_tv_01, plug_fridge_01)
+# ─────────────────────────────────────────────
+device_type: smart_plug
+sensor_types: state, power_watts, energy_kwh
+  state       – current on/off state of the outlet ("on" or "off")
+  power_watts – real-time power consumption in Watts (W)
+  energy_kwh  – cumulative energy usage in kilowatt-hours (kWh)
+
+# ─────────────────────────────────────────────
+# Smart Blind  (device IDs: blind_living_01)
+# ─────────────────────────────────────────────
+device_type: smart_blind
+sensor_types: state, position, tilt
+  state    – descriptive state: "open" | "closed" | "partial"
+  position – blind opening level as a percentage (0 % = fully closed, 100 % = fully open)
+  tilt     – slat tilt angle in degrees (0–90°)
+
+# ─────────────────────────────────────────────
+# Smart Speaker  (device IDs: speaker_living_01, speaker_living_02)
+# ─────────────────────────────────────────────
+device_type: smart_speaker
+sensor_types: state, volume, media_source
+  state        – playback state: "playing" | "paused" | "off"
+  volume       – current volume level as a percentage (0–100 %)
+  media_source – active audio source (e.g. "Spotify", "RadioFM", "none")

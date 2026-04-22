@@ -1,0 +1,54 @@
+# Smart Home Automation Rules
+# Devices use CoreIoT / Thingsboard shared attributes (not REST device IDs).
+# Attribute keys: led (boolean), brightness (integer 0-100), toogle (boolean), speed (integer 0-3)
+
+rule_id: R001
+name: Welcome Home Lighting
+trigger: motion detected at entrance
+condition: time is between 18:00 and 23:00
+action: post_shared_attribute — Đèn trần (living_room, token xdF2nW4aR9SAdqqPiym0) → {"led": true}
+        post_shared_attribute — đèn bếp (kitchen, token k1l2m3n4o5p6q7r8s9t0) → {"led": true}
+priority: high
+description: Turn on living room ceiling light and kitchen light when someone arrives home in the evening.
+
+rule_id: R002
+name: Auto-Off Empty Room
+trigger: no motion in living_room for 15 minutes
+condition: Đèn trần led == true
+action: post_shared_attribute — Đèn trần (living_room, token xdF2nW4aR9SAdqqPiym0) → {"led": false}
+priority: medium
+description: Turn off the living room ceiling light when the room is empty for 15 minutes.
+
+rule_id: R003
+name: Morning Wake-Up Scene
+trigger: schedule at 07:00 on weekdays
+condition: none
+action: post_shared_attribute — Đèn ngủ (living_room, token a1b2c3d4e5f6g7h8i9j0) → {"brightness": 30, "led": true}
+priority: high
+description: Gradually turn on the bedside lamp at low brightness to wake up gently.
+
+rule_id: R004
+name: Night Mode
+trigger: schedule at 23:00
+condition: none
+action: post_shared_attribute — Đèn trần (living_room, token xdF2nW4aR9SAdqqPiym0) → {"led": false}
+        post_shared_attribute — đèn bếp (kitchen, token k1l2m3n4o5p6q7r8s9t0) → {"led": false}
+        post_shared_attribute — quạt trần (kitchen, token f9g8h7i6j5k4l3m2n1o0) → {"toogle": false}
+priority: high
+description: Turn off all lights and the kitchen fan at night.
+
+rule_id: R005
+name: Kitchen Ventilation
+trigger: kitchen fan toogle == true AND speed == 0
+condition: none
+action: post_shared_attribute — quạt trần (kitchen, token f9g8h7i6j5k4l3m2n1o0) → {"speed": 1}
+priority: low
+description: When the kitchen fan is toggled on without a speed set, default to speed 1.
+
+rule_id: R006
+name: Full Brightness on Demand
+trigger: user says "sáng hơn" or "full brightness"
+condition: Đèn ngủ led == true
+action: post_shared_attribute — Đèn ngủ (living_room, token a1b2c3d4e5f6g7h8i9j0) → {"brightness": 100}
+priority: medium
+description: Increase bedside lamp to maximum brightness on user request.

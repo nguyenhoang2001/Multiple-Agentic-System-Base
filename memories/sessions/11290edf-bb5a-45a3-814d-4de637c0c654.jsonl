@@ -1,0 +1,2 @@
+{"device_name": "living_room_ceiling_light_fan", "room": "living_room", "token": "xdF2nW4aR9SAdqqPiym0", "action": "post", "type_device": "smart_light_fan", "shared_attributes": {"living_ceiling_light": true, "living_ceiling_fan": true}, "timestamp": "2026-04-16T19:12:11.169680+00:00"}
+{"device_name": "living_room_ceiling_light_fan", "room": "living_room", "token": "xdF2nW4aR9SAdqqPiym0", "action": "read", "type_device": "smart_light_fan", "shared_attributes": {"living_ceiling_fan_speed": 0}, "timestamp": "2026-04-16T19:12:11.252582+00:00"}

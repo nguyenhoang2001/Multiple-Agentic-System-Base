@@ -1,0 +1,118 @@
+{
+  "rooms": [
+    {
+      "name": "living_room",
+      "type_device": [
+        {
+          "name_type": "smart_light_fan",
+          "devices": [
+            {
+              "name": "living_room_ceiling_light_fan",
+              "device_token": "xdF2nW4aR9SAdqqPiym0",
+              "device_id": "fcceeaa0-3111-11f1-9981-cffbb69f5b14",
+              "description_location": "The onboard ceiling light and ceiling fan in the living room",
+              "sensors": [
+                {
+                  "sensor_name": "ceiling_light",
+                  "shared_attributes": [
+                    {
+                      "name_key": "living_ceiling_light",
+                      "value": "boolean",
+                      "description": "Indicates whether the living room ceiling light is ON or OFF"
+                    }
+                  ]
+                },
+                {
+                  "sensor_name": "ceiling_fan",
+                  "shared_attributes": [
+                    {
+                      "name_key": "living_ceiling_fan",
+                      "value": "boolean (true-ON, false-OFF)",
+                      "description": "Indicates whether the living room ceiling fan is ON or OFF (true-ON, false-OFF)"
+                    },
+                    {
+                      "name_key": "living_ceiling_fan_speed",
+                      "value": "integer (0-OFF, 1-LOW, 2-MEDIUM, 3-HIGH (DEFAULT-ON))",
+                      "description": "Represents the speed level of the living room ceiling fan (0-OFF, 1-LOW, 2-MEDIUM, 3-HIGH (DEFAULT-ON))"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bedroom",
+      "type_device": [
+        {
+          "name_type": "smart_night_light",
+          "devices": [
+            {
+              "name": "bedroom_night_light_controller",
+              "device_token": "xdF2nW4aR9SAdqqPiym0",
+              "device_id": "fcceeaa0-3111-11f1-9981-cffbb69f5b14",
+              "description_location": "The 4 RGB LED bedroom night light controller",
+              "sensors": [
+                {
+                  "sensor_name": "night_light",
+                  "shared_attributes": [
+                    {
+                      "name_key": "bedroom_night_light",
+                      "value": "boolean",
+                      "description": "Indicates whether the bedroom night light is ON or OFF"
+                    },
+                    {
+                      "name_key": "bedroom_night_light_mode",
+                      "value": "integer (1-WARM WHITE, 2-BLUE, 3-PURPLE, 4-RAINDOW)",
+                      "description": "Represents the bedroom night light mode (1-WARM WHITE, 2-BLUE, 3-PURPLE, 4-RAINDOW)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "indoor_environment",
+      "type_device": [
+        {
+          "name_type": "temperature_humidity",
+          "devices": [
+            {
+              "name": "indoor_temperature_humidity_sensor",
+              "device_token": "xdF2nW4aR9SAdqqPiym0",
+              "device_id": "fcceeaa0-3111-11f1-9981-cffbb69f5b14",
+              "description_location": "Indoor temperature and humidity sensor using DHT20",
+              "sensors": [
+                {
+                  "sensor_name": "temperature_sensor",
+                  "shared_attributes": [
+                    {
+                      "name_key": "indoor_temperature",
+                      "value": "float",
+                      "description": "Represents the indoor temperature in degrees Celsius"
+                    }
+                  ]
+                },
+                {
+                  "sensor_name": "humidity_sensor",
+                  "shared_attributes": [
+                    {
+                      "name_key": "indoor_humidity",
+                      "value": "float",
+                      "description": "Represents the indoor humidity percentage"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

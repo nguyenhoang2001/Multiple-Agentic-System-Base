@@ -1,0 +1,95 @@
+{
+  "rooms": [
+    {
+      "name": "living_room",
+      "type_device": [
+        {
+          "name_type": "smart_light_fan",
+          "devices": [
+            {
+              "name": "Celling_fan_bedside_night_light",
+              "device_token": "xdF2nW4aR9SAdqqPiym0",
+              "device_id": "fcceeaa0-3111-11f1-9981-cffbb69f5b14",
+              "description_location": "the ceiling led, fan and night light of the living room",
+              "sensors": [
+                {
+                  "sensor_name": "led_celling",
+                  "shared_attributes": [
+                    {
+                      "name_key": "led_celling",
+                      "value": "boolean",
+                      "description": "Indicates whether the LED on the ceiling light is ON or OFF"
+                    }
+                  ]
+                },
+                {
+                  "sensor_name": "brightness_beside_night_light",
+                  "shared_attributes": [
+                    {
+                      "name_key": "led_beside_night_light",
+                      "value": "boolean",
+                      "description": "Indicates whether the LED on the bedside night light is ON or OFF"
+                    },
+                    {
+                      "name_key": "brightness_beside_night_light",
+                      "value": "integer",
+                      "description": "Represents the colour RGB brightness of the night light (0-Red, 1- Green, 2- Blue)"
+                    }
+                  ]
+                },
+                {
+                  "sensor_name": "fan",
+                  "shared_attributes": [
+                    {
+                      "name_key": "integer_fan_speed",
+                      "value": "integer",
+                      "description": "Represents the speed level of the fan zero is OFF/FALSE, three is ON/TRUE (0-off, 1-low, 2-medium, 3-high)"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "kitchen",
+      "type_device": [
+        {
+          "name_type": "temperature_humidity",
+          "devices": [
+            {
+              "name": "smart_temperature_humidity",
+              "device_token": "xdF2nW4aR9SAdqqPiym0",
+              "device_id": "fcceeaa0-3111-11f1-9981-cffbb69f5b14",
+              "description_location": "the smart temperature and humidity sensor in the kitchen",
+              "sensors": [
+                {
+                  "sensor_name": "humidity_sensor",
+                  "shared_attributes": [
+                    {
+                      "name_key": "indoor_humidity",
+                      "value": "float",
+                      "description": "Represents the humidity level as a float between 0 and 100"
+                    }
+                  ]
+                },
+                {
+                  "sensor_name": "temperature_sensor",
+                  "shared_attributes": [
+                    {
+                      "name_key": "indoor_temperature",
+                      "value": "float",
+                      "description": "Represents the temperature level as a float in degrees Celsius"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
